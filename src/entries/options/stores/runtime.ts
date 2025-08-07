@@ -73,8 +73,12 @@ export const useRuntimeStore = defineStore("runtime", {
     },
 
     showSnakebar(text: string, options: SnackbarMessageOptions = {}) {
-      // @ts-ignore
-      this.uiGlobalSnakebar.push({ text, ...options });
+      const id = Date.now() + Math.random();
+      this.uiGlobalSnakebar.push({ id, text, ...options });
+
+      setTimeout(() => {
+        this.uiGlobalSnakebar = this.uiGlobalSnakebar.filter((item) => item.id !== id);
+      }, options.timeout || 5000); // Default timeout of 5 seconds
     },
   },
 });

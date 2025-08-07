@@ -19,7 +19,13 @@ import NavButton from "@/options/components/NavButton.vue";
 import UserLevelRequirementsTd from "./UserLevelRequirementsTd.vue";
 import HistoryDataViewDialog from "./HistoryDataViewDialog.vue";
 
-import { cancelFlushSiteLastUserInfo, fixUserInfo, flushSiteLastUserInfo, formatRatio } from "./utils.ts";
+import {
+  cancelFlushSiteLastUserInfo,
+  fixUserInfo,
+  flushSiteLastUserInfo,
+  formatRatio,
+  attendanceSite,
+} from "./utils.ts";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -193,6 +199,14 @@ function toggleNumberSimplification() {
           color="green"
           icon="mdi-cached"
           @click="() => flushSiteLastUserInfo(tableSelected)"
+        />
+
+        <NavButton
+          :disabled="tableSelected.length === 0"
+          :text="t('MyData.index.attendanceSite')"
+          color="blue"
+          icon="mdi-check-all"
+          @click="() => attendanceSite(tableSelected)"
         />
 
         <NavButton

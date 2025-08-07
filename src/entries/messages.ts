@@ -125,7 +125,8 @@ interface ProtocolMap extends TMessageMap {
   // 2.4 用户信息 ( utils/userInfo )
   getSiteUserInfoResult(siteId: TSiteID): IUserInfo;
   setSiteLastUserInfo(userInfo: IUserInfo): void;
-  cancelUserInfoQueue(): void;
+  cancelUserInfoQueue: () => void;
+  attendance: (siteId: TSiteID) => string;
   getSiteUserInfo(siteId: TSiteID): Record<string, IUserInfo>;
   removeSiteUserInfo(data: { siteId: TSiteID; date: string[] }): void;
 

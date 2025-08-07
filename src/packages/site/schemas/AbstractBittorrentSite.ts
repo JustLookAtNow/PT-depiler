@@ -718,4 +718,37 @@ export default class BittorrentSite {
       this.metadata.download?.requestConfig ?? {},
     );
   }
+
+  /**
+   * 站点签到
+   */
+  public async doCheckIn(): Promise<string> {
+    const checkInConfig = (this.metadata as any).checkIn as {
+      path: string;
+      method?: "GET" | "POST";
+      data?: Record<string, any>;
+      selectors?: {
+        message: IElementQuery;
+      };
+    };
+
+    if (!checkInConfig?.path) {
+      throw new Error(`Site ${this.name} does not support check-in.`);
+    }
+
+    const req = await this.request<Document>({
+      url: checkInConfig.path,
+      method: checkInConfig.method || "GET",
+      data: checkInConfig.data,
+      responseType: "document",
+    });
+
+    if (checkInConfig.selectors?.message) {
+      const message = this.getFieldData(req.data, checkInConfig.selectors.message);
+      const plainText = message.replace(/<[^>]*>/g, ""); // Remove all HTML tags
+      return plainText;
+    }
+
+    return `Check-in request for ${this.name} completed, but no message selector is configured.`;
+  }
 }

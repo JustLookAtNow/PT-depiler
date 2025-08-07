@@ -102,6 +102,16 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
+  checkIn: {
+    path: "/attendance.php",
+    method: "GET",
+    selectors: {
+      message: {
+        selector: "#outer > table.main > tbody > tr > td > table > tbody > tr > td > p",
+      },
+    },
+  },
+
   levelRequirements: [
     {
       id: 0,

@@ -46,7 +46,22 @@ export function formatRatio(
   return realFormatRatio(ratio);
 }
 
+export function attendanceSite(sites: TSiteID[]) {
+  const runtimeStore = useRuntimeStore();
+  for (const site of sites) {
+    sendMessage("attendance", site)
+      .then((message) => {
+        runtimeStore.showSnakebar(`站点 [${site}] 签到成功: ${message}`, { color: "success" });
+      })
+      .catch((e) => {
+        runtimeStore.showSnakebar(`站点 [${site}] 签到失败`, { color: "error" });
+        console.error(e);
+      });
+  }
+}
+
 export function flushSiteLastUserInfo(sites: TSiteID[]) {
+  const runtimeStore = useRuntimeStore();
   for (const site of sites) {
     runtimeStore.userInfo.flushPlan[site] = true;
 

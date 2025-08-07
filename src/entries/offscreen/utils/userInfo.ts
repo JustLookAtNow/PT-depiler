@@ -132,3 +132,10 @@ onMessage("removeSiteUserInfo", async ({ data: { siteId, date } }) => {
   }
   await sendMessage("setExtStorage", { key: "userInfo", value: userInfoStore! });
 });
+
+onMessage("attendance", async ({ data: siteId }) => {
+  logger({ msg: `attendance for ${siteId}` });
+
+  const site = await getSiteInstance(siteId);
+  return await site.doCheckIn();
+});
