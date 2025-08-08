@@ -338,6 +338,30 @@ export interface ISiteMetadata {
    * 对应的信息应该存入 userConfig 中
    */
   userInputSettingMeta?: ISiteUserInputMeta[];
+  /**
+   * 站点签到配置
+   */
+  checkIn?: {
+    /**
+     * 签到请求路径，支持相对路径
+     */
+    path: string;
+    /**
+     * 请求方法，默认 GET
+     */
+    method?: "GET" | "POST";
+    /**
+     * 请求体，用于 POST 方法提交的数据
+     */
+    data?: Record<string, any>;
+    /**
+     * 用于解析签到返回信息的选择器
+     */
+    selectors?: {
+      message: IElementQuery;
+    };
+    [key: string]: any;
+  };
 }
 
 /**
@@ -407,8 +431,6 @@ export interface ISiteUserConfig {
    * 比如用户可以通过覆盖站点配置 $.search.searchEntry[*].enabled 项，在默认搜索中启用或禁用某一搜索入口
    */
   merge?: Partial<ISiteMetadata>;
-
-  [key: string]: any;
 }
 
 export interface IParsedTorrentListPage {

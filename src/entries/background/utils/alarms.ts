@@ -11,6 +11,7 @@ export enum EJobType {
   FlushUserInfo = "flushUserInfo",
   ReDownloadTorrentToDownloader = "reDownloadTorrentToDownloader",
   ReDownloadTorrentToLocalFile = "reDownloadTorrentToLocalFile",
+  DailySiteCheckIn = "dailySiteCheckIn",
 }
 
 const jobs = defineJobScheduler();
@@ -124,6 +125,115 @@ onMessage("setFlushUserInfoJob", async () => await setFlushUserInfoJob());
 
 // noinspection JSIgnoredPromiseFromCall
 createFlushUserInfoJob();
+
+// 创建站点签到定时任务
+export async function createDailySiteCheckInJob() {
+  await setupOffscreenDocument();
+
+  async function doSiteCheckIn() {
+    const curDate = new Date();
+    const curDateFormat = format(curDate, "yyyy-MM-dd");
+    sendMessage("logger", {
+      msg: `Daily site check-in at ${curDateFormat}`,
+    }).catch();
+
+    let metadataStore = (await extStorage.getItem("metadata"))!;
+
+    // 遍历 metadataStore 中添加的站点
+    const checkInPromises = [];
+    const failCheckInSites: TSiteID[] = [];
+    for (const siteId of Object.keys(metadataStore.sites)) {
+      checkInPromises.push(
+        new Promise(async (resolve, reject) => {
+          try {
+            const siteConfig = await sendMessage("getSiteUserConfig", { siteId });
+            if (!siteConfig.isOffline) {
+              try {
+                const checkInResult = await sendMessage("attendance", siteId);
+                sendMessage("logger", {
+                  msg: `Check-in result for ${siteId}: ${checkInResult}`,
+                }).catch();
+              } catch (e) {
+                failCheckInSites.push(siteId);
+                sendMessage("logger", {
+                  msg: `Failed to check-in for site ${siteId}`,
+                  level: "error",
+                }).catch();
+                reject(siteId);
+              }
+            }
+            resolve(siteId);
+          } catch (e) {
+            reject(siteId);
+          }
+        }),
+      );
+    }
+
+    // 等待所有签到操作完成
+    await Promise.allSettled(checkInPromises);
+    sendMessage("logger", {
+      msg: `Daily site check-in finished, ${checkInPromises.length} sites processed, ${failCheckInSites.length} failed.`,
+      data: { failCheckInSites },
+    }).catch();
+  }
+
+  // 设置每天8:30执行签到
+  const now = new Date();
+  const checkInTime = new Date(now);
+  checkInTime.setHours(8, 30, 0, 0);
+
+  // 如果当前时间已经过了今天的签到时间，则设置为明天
+  if (now > checkInTime) {
+    checkInTime.setDate(checkInTime.getDate() + 1);
+  }
+
+  await jobs.scheduleJob({
+    id: EJobType.DailySiteCheckIn,
+    type: "once",
+    date: checkInTime.getTime(), // 指定首次执行时间
+    execute: async () => {
+      await doSiteCheckIn();
+      // 安排下一次签到（24 小时后，同一时间）
+      await jobs.scheduleJob({
+        id: EJobType.DailySiteCheckIn,
+        type: "once",
+        date: Date.now() + 24 * 60 * 60 * 1000,
+        execute: async () => {
+          // 递归触发下一次
+          await doSiteCheckIn();
+        },
+      });
+    },
+  });
+
+  sendMessage("logger", {
+    msg: `Daily site check-in job has been scheduled at ${format(checkInTime, "yyyy-MM-dd HH:mm:ss")}`,
+  }).catch();
+}
+
+export async function cleanupDailySiteCheckInJob() {
+  const allAlarms = await chrome.alarms.getAll();
+  for (const alarm of allAlarms) {
+    if (alarm.name.startsWith(EJobType.DailySiteCheckIn)) {
+      await jobs.removeJob(alarm.name);
+    }
+  }
+  sendMessage("logger", { msg: "All daily site check-in jobs have been cleaned up." }).catch();
+}
+
+export async function setDailySiteCheckInJob() {
+  await cleanupDailySiteCheckInJob();
+  await createDailySiteCheckInJob();
+  sendMessage("logger", { msg: `Daily site check-in job has been set successfully.` }).catch();
+}
+
+onMessage("setDailySiteCheckInJob", async () => await setDailySiteCheckInJob());
+onMessage("cleanupDailySiteCheckInJob", async () => await cleanupDailySiteCheckInJob());
+
+// 初始化时启动签到定时任务
+// noinspection JSIgnoredPromiseFromCall
+createDailySiteCheckInJob();
 
 function doReDownloadTorrentToDownloader(option: IDownloadTorrentToClientOption) {
   return async () => {
