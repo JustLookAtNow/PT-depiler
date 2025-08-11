@@ -129,6 +129,8 @@ createFlushUserInfoJob();
 // 创建站点签到定时任务
 export async function createDailySiteCheckInJob() {
   await setupOffscreenDocument();
+  // 先清理已存在的同名任务，防止重复调度
+  await cleanupDailySiteCheckInJob();
 
   async function doSiteCheckIn() {
     const curDate = new Date();
@@ -141,6 +143,7 @@ export async function createDailySiteCheckInJob() {
 
     // 遍历 metadataStore 中添加的站点
     const checkInPromises = [];
+    const successResults: { siteId: TSiteID; message: string }[] = [];
     const failCheckInSites: TSiteID[] = [];
     for (const siteId of Object.keys(metadataStore.sites)) {
       checkInPromises.push(
@@ -174,7 +177,7 @@ export async function createDailySiteCheckInJob() {
     await Promise.allSettled(checkInPromises);
     sendMessage("logger", {
       msg: `Daily site check-in finished, ${checkInPromises.length} sites processed, ${failCheckInSites.length} failed.`,
-      data: { failCheckInSites },
+      data: { failCheckInSites, successResults },
     }).catch();
   }
 
