@@ -129,8 +129,14 @@ createFlushUserInfoJob();
 // 创建站点签到定时任务
 export async function createDailySiteCheckInJob() {
   await setupOffscreenDocument();
-  // 先清理已存在的同名任务，防止重复调度
-  await cleanupDailySiteCheckInJob();
+  // 若已存在同名任务，则不再重复创建
+  const existingAlarm = await chrome.alarms.get(EJobType.DailySiteCheckIn);
+  if (existingAlarm) {
+    sendMessage("logger", {
+      msg: `Daily site check-in job already exists, next run at ${format(existingAlarm.scheduledTime, "yyyy-MM-dd HH:mm:ss")}`,
+    }).catch();
+    return;
+  }
 
   async function doSiteCheckIn() {
     const curDate = new Date();
