@@ -132,9 +132,6 @@ export async function createDailySiteCheckInJob() {
   // 若已存在同名任务，则不再重复创建
   const existingAlarm = await chrome.alarms.get(EJobType.DailySiteCheckIn);
   if (existingAlarm) {
-    sendMessage("logger", {
-      msg: `Daily site check-in job already exists, next run at ${format(existingAlarm.scheduledTime, "yyyy-MM-dd HH:mm:ss")}`,
-    }).catch();
     return;
   }
 
@@ -159,9 +156,11 @@ export async function createDailySiteCheckInJob() {
             if (!siteConfig.isOffline) {
               try {
                 const checkInResult = await sendMessage("attendance", siteId);
+                successResults.push({ siteId, message: checkInResult });
                 sendMessage("logger", {
                   msg: `Check-in result for ${siteId}: ${checkInResult}`,
                 }).catch();
+                resolve(siteId);
               } catch (e) {
                 failCheckInSites.push(siteId);
                 sendMessage("logger", {
@@ -170,8 +169,9 @@ export async function createDailySiteCheckInJob() {
                 }).catch();
                 reject(siteId);
               }
+            } else {
+              resolve(siteId);
             }
-            resolve(siteId);
           } catch (e) {
             reject(siteId);
           }
@@ -185,6 +185,23 @@ export async function createDailySiteCheckInJob() {
       msg: `Daily site check-in finished, ${checkInPromises.length} sites processed, ${failCheckInSites.length} failed.`,
       data: { failCheckInSites, successResults },
     }).catch();
+  }
+
+  async function scheduleNextCheckIn() {
+    // 安排下一次签到（24 小时后，同一时间）
+    const nextCheckInTime = new Date();
+    nextCheckInTime.setDate(nextCheckInTime.getDate() + 1);
+    nextCheckInTime.setHours(8, 30, 0, 0);
+
+    await jobs.scheduleJob({
+      id: EJobType.DailySiteCheckIn,
+      type: "once",
+      date: nextCheckInTime.getTime(),
+      execute: async () => {
+        await doSiteCheckIn();
+        await scheduleNextCheckIn(); // 递归调度下一次
+      },
+    });
   }
 
   // 设置每天8:30执行签到
@@ -203,16 +220,7 @@ export async function createDailySiteCheckInJob() {
     date: checkInTime.getTime(), // 指定首次执行时间
     execute: async () => {
       await doSiteCheckIn();
-      // 安排下一次签到（24 小时后，同一时间）
-      await jobs.scheduleJob({
-        id: EJobType.DailySiteCheckIn,
-        type: "once",
-        date: Date.now() + 24 * 60 * 60 * 1000,
-        execute: async () => {
-          // 递归触发下一次
-          await doSiteCheckIn();
-        },
-      });
+      await scheduleNextCheckIn(); // 执行完成后调度下一次
     },
   });
 
@@ -240,7 +248,7 @@ export async function setDailySiteCheckInJob() {
 onMessage("setDailySiteCheckInJob", async () => await setDailySiteCheckInJob());
 onMessage("cleanupDailySiteCheckInJob", async () => await cleanupDailySiteCheckInJob());
 
-// 初始化时启动签到定时任务
+// 初始化时启动签到定时任务（带存在性检查，不会重复创建）
 // noinspection JSIgnoredPromiseFromCall
 createDailySiteCheckInJob();
 

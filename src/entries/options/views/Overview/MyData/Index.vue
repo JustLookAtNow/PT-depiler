@@ -25,6 +25,7 @@ import {
   flushSiteLastUserInfo,
   formatRatio,
   attendanceSite,
+  resetDailySiteCheckInJob,
 } from "./utils.ts";
 
 const { t } = useI18n();
@@ -207,6 +208,14 @@ function toggleNumberSimplification() {
           color="blue"
           icon="mdi-check-all"
           @click="() => attendanceSite(tableSelected)"
+        />
+
+        <!-- 重置签到任务按钮 -->
+        <NavButton
+          :text="t('MyData.index.resetCheckInJob')"
+          color="purple"
+          icon="mdi-restart"
+          @click="resetDailySiteCheckInJob"
         />
 
         <NavButton

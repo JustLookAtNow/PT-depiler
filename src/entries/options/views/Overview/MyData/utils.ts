@@ -134,3 +134,18 @@ export async function loadAllAddedSiteMetadata(sites?: string[]): Promise<TOptio
 
   return allAddedSiteMetadata;
 }
+
+// 重置签到任务函数
+export async function resetDailySiteCheckInJob() {
+  const runtimeStore = useRuntimeStore();
+  try {
+    // 先清理现有的签到任务
+    await sendMessage("cleanupDailySiteCheckInJob", undefined);
+    // 然后重新设置签到任务
+    await sendMessage("setDailySiteCheckInJob", undefined);
+    runtimeStore.showSnakebar("签到任务已重置成功", { color: "success" });
+  } catch (error) {
+    console.error("重置签到任务失败", error);
+    runtimeStore.showSnakebar("重置签到任务失败", { color: "error" });
+  }
+}

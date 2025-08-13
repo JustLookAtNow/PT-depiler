@@ -206,6 +206,7 @@
     "index": {
       "flushSelectSite": "刷新数据",
       "attendanceSite": "一键签到",
+      "resetCheckInJob": "重置签到任务",
       "flushCancel": "取消刷新",
       "joinTimeFormat": "入站时间显示",
       "joinTimeFormatOptions": {

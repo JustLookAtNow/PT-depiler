@@ -206,6 +206,7 @@
     "index": {
       "flushSelectSite": "Flush selected",
       "attendanceSite": "attendance site",
+      "resetCheckInJob": "Reset Check-in Task",
       "flushCancel": "Flush canceled",
       "joinTimeFormat": "Display join time",
       "joinTimeFormatOptions": {
