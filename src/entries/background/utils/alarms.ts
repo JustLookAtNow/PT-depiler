@@ -12,6 +12,7 @@ export enum EJobType {
   ReDownloadTorrentToDownloader = "reDownloadTorrentToDownloader",
   ReDownloadTorrentToLocalFile = "reDownloadTorrentToLocalFile",
   DailySiteCheckIn = "dailySiteCheckIn",
+  RetryCheckIn = "retryCheckIn",
 }
 
 const jobs = defineJobScheduler();
@@ -135,6 +136,60 @@ export async function createDailySiteCheckInJob() {
     return;
   }
 
+  // 存储失败站点的重试信息
+  const retryCheckInMap = new Map<TSiteID, number>();
+
+  // 重试签到函数
+  async function retryCheckIn(siteId: TSiteID) {
+    const retryCount = retryCheckInMap.get(siteId) || 0;
+
+    if (retryCount >= 3) {
+      // 已达到最大重试次数，从重试列表中移除
+      retryCheckInMap.delete(siteId);
+      sendMessage("logger", {
+        msg: `Site ${siteId} check-in failed after 3 retries, giving up.`,
+        level: "error",
+      }).catch();
+      return;
+    }
+
+    try {
+      const siteConfig = await sendMessage("getSiteUserConfig", { siteId });
+      if (!siteConfig.isOffline) {
+        try {
+          const checkInResult = await sendMessage("attendance", siteId);
+          sendMessage("logger", {
+            msg: `Retry check-in success for ${siteId}: ${checkInResult}`,
+          }).catch();
+          // 成功后从重试列表中移除
+          retryCheckInMap.delete(siteId);
+        } catch (e) {
+          // 更新重试次数
+          retryCheckInMap.set(siteId, retryCount + 1);
+          sendMessage("logger", {
+            msg: `Retry check-in failed for site ${siteId}, attempt ${retryCount + 1}/3`,
+            level: "error",
+          }).catch();
+
+          // 安排下一次重试（一小时后）
+          await jobs.scheduleJob({
+            id: `${EJobType.RetryCheckIn}-${siteId}-${retryCount + 1}`,
+            type: "once",
+            date: Date.now() + 60 * 60 * 1000, // 1小时后
+            execute: async () => {
+              await retryCheckIn(siteId);
+            },
+          });
+        }
+      }
+    } catch (e) {
+      sendMessage("logger", {
+        msg: `Error getting site config for ${siteId} during retry`,
+        level: "error",
+      }).catch();
+    }
+  }
+
   async function doSiteCheckIn() {
     const curDate = new Date();
     const curDateFormat = format(curDate, "yyyy-MM-dd");
@@ -185,6 +240,28 @@ export async function createDailySiteCheckInJob() {
       msg: `Daily site check-in finished, ${checkInPromises.length} sites processed, ${failCheckInSites.length} failed.`,
       data: { failCheckInSites, successResults },
     }).catch();
+
+    // 为失败的站点安排重试
+    if (failCheckInSites.length > 0) {
+      sendMessage("logger", {
+        msg: `Scheduling retry for ${failCheckInSites.length} failed sites in 1 hour`,
+      }).catch();
+
+      for (const siteId of failCheckInSites) {
+        // 初始化重试计数
+        retryCheckInMap.set(siteId, 0);
+
+        // 安排一小时后的第一次重试
+        await jobs.scheduleJob({
+          id: `${EJobType.RetryCheckIn}-${siteId}-0`,
+          type: "once",
+          date: Date.now() + 60 * 60 * 1000, // 1小时后
+          execute: async () => {
+            await retryCheckIn(siteId);
+          },
+        });
+      }
+    }
   }
 
   async function scheduleNextCheckIn() {
@@ -232,11 +309,11 @@ export async function createDailySiteCheckInJob() {
 export async function cleanupDailySiteCheckInJob() {
   const allAlarms = await chrome.alarms.getAll();
   for (const alarm of allAlarms) {
-    if (alarm.name.startsWith(EJobType.DailySiteCheckIn)) {
+    if (alarm.name.startsWith(EJobType.DailySiteCheckIn) || alarm.name.startsWith(EJobType.RetryCheckIn)) {
       await jobs.removeJob(alarm.name);
     }
   }
-  sendMessage("logger", { msg: "All daily site check-in jobs have been cleaned up." }).catch();
+  sendMessage("logger", { msg: "All daily site check-in jobs and retry jobs have been cleaned up." }).catch();
 }
 
 export async function setDailySiteCheckInJob() {
