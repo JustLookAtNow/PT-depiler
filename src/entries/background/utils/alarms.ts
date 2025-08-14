@@ -127,82 +127,84 @@ onMessage("setFlushUserInfoJob", async () => await setFlushUserInfoJob());
 // noinspection JSIgnoredPromiseFromCall
 createFlushUserInfoJob();
 
-// 创建站点签到定时任务
-export async function createDailySiteCheckInJob() {
-  await setupOffscreenDocument();
-  // 若已存在同名任务，则不再重复创建
-  const existingAlarm = await chrome.alarms.get(EJobType.DailySiteCheckIn);
-  if (existingAlarm) {
+// 存储失败站点的重试信息
+const retryCheckInMap = new Map<TSiteID, number>();
+
+// 重试签到函数
+async function retryCheckIn(siteId: TSiteID) {
+  const retryCount = retryCheckInMap.get(siteId) || 0;
+
+  if (retryCount >= 3) {
+    // 已达到最大重试次数，从重试列表中移除
+    retryCheckInMap.delete(siteId);
+    sendMessage("logger", {
+      msg: `Site ${siteId} check-in failed after 3 retries, giving up.`,
+      level: "error",
+    }).catch();
     return;
   }
 
-  // 存储失败站点的重试信息
-  const retryCheckInMap = new Map<TSiteID, number>();
+  try {
+    const siteConfig = await sendMessage("getSiteUserConfig", { siteId });
+    if (!siteConfig.isOffline) {
+      try {
+        const checkInResult = await sendMessage("attendance", siteId);
+        sendMessage("logger", {
+          msg: `Retry check-in success for ${siteId}: ${checkInResult}`,
+        }).catch();
+        // 成功后从重试列表中移除
+        retryCheckInMap.delete(siteId);
+      } catch (e) {
+        // 更新重试次数
+        retryCheckInMap.set(siteId, retryCount + 1);
+        sendMessage("logger", {
+          msg: `Retry check-in failed for site ${siteId}, attempt ${retryCount + 1}/3`,
+          level: "error",
+        }).catch();
 
-  // 重试签到函数
-  async function retryCheckIn(siteId: TSiteID) {
-    const retryCount = retryCheckInMap.get(siteId) || 0;
-
-    if (retryCount >= 3) {
-      // 已达到最大重试次数，从重试列表中移除
-      retryCheckInMap.delete(siteId);
-      sendMessage("logger", {
-        msg: `Site ${siteId} check-in failed after 3 retries, giving up.`,
-        level: "error",
-      }).catch();
-      return;
-    }
-
-    try {
-      const siteConfig = await sendMessage("getSiteUserConfig", { siteId });
-      if (!siteConfig.isOffline) {
-        try {
-          const checkInResult = await sendMessage("attendance", siteId);
-          sendMessage("logger", {
-            msg: `Retry check-in success for ${siteId}: ${checkInResult}`,
-          }).catch();
-          // 成功后从重试列表中移除
-          retryCheckInMap.delete(siteId);
-        } catch (e) {
-          // 更新重试次数
-          retryCheckInMap.set(siteId, retryCount + 1);
-          sendMessage("logger", {
-            msg: `Retry check-in failed for site ${siteId}, attempt ${retryCount + 1}/3`,
-            level: "error",
-          }).catch();
-
-          // 安排下一次重试（一小时后）
-          await jobs.scheduleJob({
-            id: `${EJobType.RetryCheckIn}-${siteId}-${retryCount + 1}`,
-            type: "once",
-            date: Date.now() + 60 * 60 * 1000, // 1小时后
-            execute: async () => {
-              await retryCheckIn(siteId);
-            },
-          });
-        }
+        // 安排下一次重试（一小时后）
+        await jobs.scheduleJob({
+          id: `${EJobType.RetryCheckIn}-${siteId}-${retryCount + 1}`,
+          type: "once",
+          date: Date.now() + 60 * 60 * 1000, // 1小时后
+          execute: async () => {
+            await retryCheckIn(siteId);
+          },
+        });
       }
-    } catch (e) {
-      sendMessage("logger", {
-        msg: `Error getting site config for ${siteId} during retry`,
-        level: "error",
-      }).catch();
     }
-  }
-
-  async function doSiteCheckIn() {
-    const curDate = new Date();
-    const curDateFormat = format(curDate, "yyyy-MM-dd");
+  } catch (e) {
     sendMessage("logger", {
-      msg: `Daily site check-in at ${curDateFormat}`,
+      msg: `Error getting site config for ${siteId} during retry`,
+      level: "error",
     }).catch();
+  }
+}
 
+// 站点签到函数
+async function doSiteCheckIn() {
+  const curDate = new Date();
+  const curDateFormat = format(curDate, "yyyy-MM-dd HH:mm:ss");
+  sendMessage("logger", {
+    msg: `Starting daily site check-in at ${curDateFormat}`,
+    level: "info",
+  }).catch();
+
+  try {
     let metadataStore = (await extStorage.getItem("metadata"))!;
 
     // 遍历 metadataStore 中添加的站点
     const checkInPromises = [];
     const successResults: { siteId: TSiteID; message: string }[] = [];
     const failCheckInSites: TSiteID[] = [];
+
+    // 记录站点数量
+    const siteCount = Object.keys(metadataStore.sites).length;
+    sendMessage("logger", {
+      msg: `Found ${siteCount} sites to check-in`,
+      level: "info",
+    }).catch();
+
     for (const siteId of Object.keys(metadataStore.sites)) {
       checkInPromises.push(
         new Promise(async (resolve, reject) => {
@@ -214,20 +216,29 @@ export async function createDailySiteCheckInJob() {
                 successResults.push({ siteId, message: checkInResult });
                 sendMessage("logger", {
                   msg: `Check-in result for ${siteId}: ${checkInResult}`,
+                  level: "info",
                 }).catch();
                 resolve(siteId);
               } catch (e) {
                 failCheckInSites.push(siteId);
                 sendMessage("logger", {
-                  msg: `Failed to check-in for site ${siteId}`,
+                  msg: `Failed to check-in for site ${siteId}: ${e}`,
                   level: "error",
                 }).catch();
                 reject(siteId);
               }
             } else {
+              sendMessage("logger", {
+                msg: `Site ${siteId} is offline, skipping check-in`,
+                level: "info",
+              }).catch();
               resolve(siteId);
             }
           } catch (e) {
+            sendMessage("logger", {
+              msg: `Error getting site config for ${siteId}: ${e}`,
+              level: "error",
+            }).catch();
             reject(siteId);
           }
         }),
@@ -237,7 +248,8 @@ export async function createDailySiteCheckInJob() {
     // 等待所有签到操作完成
     await Promise.allSettled(checkInPromises);
     sendMessage("logger", {
-      msg: `Daily site check-in finished, ${checkInPromises.length} sites processed, ${failCheckInSites.length} failed.`,
+      msg: `Daily site check-in finished, ${checkInPromises.length} sites processed, ${successResults.length} succeeded, ${failCheckInSites.length} failed.`,
+      level: "info",
       data: { failCheckInSites, successResults },
     }).catch();
 
@@ -245,6 +257,7 @@ export async function createDailySiteCheckInJob() {
     if (failCheckInSites.length > 0) {
       sendMessage("logger", {
         msg: `Scheduling retry for ${failCheckInSites.length} failed sites in 1 hour`,
+        level: "info",
       }).catch();
 
       for (const siteId of failCheckInSites) {
@@ -262,40 +275,131 @@ export async function createDailySiteCheckInJob() {
         });
       }
     }
+  } catch (error) {
+    sendMessage("logger", {
+      msg: `Error during site check-in: ${error}`,
+      level: "error",
+    }).catch();
   }
+}
 
-  async function scheduleNextCheckIn() {
-    // 安排下一次签到（24 小时后，同一时间）
-    const nextCheckInTime = new Date();
-    nextCheckInTime.setDate(nextCheckInTime.getDate() + 1);
-    nextCheckInTime.setHours(8, 30, 0, 0);
-
-    await jobs.scheduleJob({
-      id: EJobType.DailySiteCheckIn,
-      type: "once",
-      date: nextCheckInTime.getTime(),
-      execute: async () => {
-        await doSiteCheckIn();
-        await scheduleNextCheckIn(); // 递归调度下一次
-      },
-    });
-  }
+// 创建站点签到定时任务
+export async function createDailySiteCheckInJob() {
+  await setupOffscreenDocument();
 
   // 设置每天8:30执行签到
   const now = new Date();
   const checkInTime = new Date(now);
   checkInTime.setHours(8, 30, 0, 0);
 
-  // 如果当前时间已经过了今天的签到时间，则设置为明天
-  if (now > checkInTime) {
+  // 检查是否已经错过了今天的签到时间
+  const missedToday = now > checkInTime;
+
+  // 安排下一次签到的函数
+  async function scheduleNextCheckIn() {
+    // 安排下一次签到（24 小时后，同一时间）
+    const nextCheckInTime = new Date();
+    nextCheckInTime.setDate(nextCheckInTime.getDate() + 1);
+    nextCheckInTime.setHours(8, 30, 0, 0);
+
+    sendMessage("logger", {
+      msg: `Scheduling next check-in at ${format(nextCheckInTime, "yyyy-MM-dd HH:mm:ss")}`,
+      level: "info",
+    }).catch();
+
+    await jobs.scheduleJob({
+      id: EJobType.DailySiteCheckIn,
+      type: "once",
+      date: nextCheckInTime.getTime(),
+      execute: async () => {
+        sendMessage("logger", {
+          msg: `Executing scheduled check-in job`,
+          level: "info",
+        }).catch();
+        await doSiteCheckIn();
+        await scheduleNextCheckIn(); // 递归调度下一次
+      },
+    });
+  }
+
+  // 若已存在同名任务，检查是否需要立即执行
+  const existingAlarm = await chrome.alarms.get(EJobType.DailySiteCheckIn);
+  if (existingAlarm) {
+    // 即使任务已存在，如果错过了今天的签到时间，也立即执行一次
+    if (missedToday) {
+      sendMessage("logger", {
+        msg: `Daily site check-in job exists but missed today's check-in time (${format(checkInTime, "HH:mm:ss")}), executing immediately at ${format(now, "yyyy-MM-dd HH:mm:ss")}`,
+        level: "info",
+      }).catch();
+
+      // 立即执行签到
+      setTimeout(async () => {
+        try {
+          await doSiteCheckIn();
+          sendMessage("logger", {
+            msg: `Immediate check-in completed successfully`,
+            level: "info",
+          }).catch();
+        } catch (error) {
+          sendMessage("logger", {
+            msg: `Error during immediate check-in: ${error}`,
+            level: "error",
+          }).catch();
+        }
+      }, 1000); // 延迟1秒执行，确保其他初始化完成
+    } else {
+      sendMessage("logger", {
+        msg: `Daily site check-in job already exists, skipping creation`,
+        level: "info",
+      }).catch();
+    }
+    return;
+  }
+
+  sendMessage("logger", {
+    msg: `Creating daily site check-in job`,
+    level: "info",
+  }).catch();
+
+  if (missedToday) {
+    // 如果错过了今天的签到时间，立即执行一次签到
+    sendMessage("logger", {
+      msg: `Missed today's check-in time (${format(checkInTime, "HH:mm:ss")}), executing immediately at ${format(now, "yyyy-MM-dd HH:mm:ss")}`,
+      level: "info",
+    }).catch();
+
+    // 立即执行签到
+    setTimeout(async () => {
+      try {
+        await doSiteCheckIn();
+        // 执行完成后，安排明天的任务
+        await scheduleNextCheckIn();
+      } catch (error) {
+        sendMessage("logger", {
+          msg: `Error during immediate check-in: ${error}`,
+          level: "error",
+        }).catch();
+      }
+    }, 1000); // 延迟1秒执行，确保其他初始化完成
+
+    // 设置明天的签到时间
     checkInTime.setDate(checkInTime.getDate() + 1);
   }
+
+  sendMessage("logger", {
+    msg: `Setting up initial check-in job for ${format(checkInTime, "yyyy-MM-dd HH:mm:ss")}`,
+    level: "info",
+  }).catch();
 
   await jobs.scheduleJob({
     id: EJobType.DailySiteCheckIn,
     type: "once",
     date: checkInTime.getTime(), // 指定首次执行时间
     execute: async () => {
+      sendMessage("logger", {
+        msg: `Executing initial check-in job`,
+        level: "info",
+      }).catch();
       await doSiteCheckIn();
       await scheduleNextCheckIn(); // 执行完成后调度下一次
     },
