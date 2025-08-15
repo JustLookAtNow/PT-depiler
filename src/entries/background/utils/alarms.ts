@@ -295,6 +295,23 @@ export async function createDailySiteCheckInJob() {
   // 检查是否已经错过了今天的签到时间
   const missedToday = now > checkInTime;
 
+  // 检查今天是否已经签到过
+  let metadataStore = await extStorage.getItem("metadata");
+  if (!metadataStore) {
+    sendMessage("logger", {
+      msg: `Failed to get metadata store, cannot check last check-in time`,
+      level: "error",
+    }).catch();
+    return;
+  }
+
+  const lastCheckInDate = metadataStore.lastCheckInAt ? new Date(metadataStore.lastCheckInAt) : null;
+  const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const lastCheckInDay = lastCheckInDate
+    ? new Date(lastCheckInDate.getFullYear(), lastCheckInDate.getMonth(), lastCheckInDate.getDate())
+    : null;
+  const checkedInToday = lastCheckInDay && lastCheckInDay.getTime() === todayDate.getTime();
+
   // 安排下一次签到的函数
   async function scheduleNextCheckIn() {
     // 安排下一次签到（24 小时后，同一时间）
@@ -317,40 +334,62 @@ export async function createDailySiteCheckInJob() {
           level: "info",
         }).catch();
         await doSiteCheckIn();
+        // 更新最后签到时间
+        const metadata = await extStorage.getItem("metadata");
+        if (metadata) {
+          metadata.lastCheckInAt = new Date().getTime();
+          await extStorage.setItem("metadata", metadata);
+        }
         await scheduleNextCheckIn(); // 递归调度下一次
       },
     });
   }
 
+  // 执行签到并更新状态的函数
+  async function executeCheckIn() {
+    try {
+      await doSiteCheckIn();
+      // 更新最后签到时间
+      const metadata = await extStorage.getItem("metadata");
+      if (metadata) {
+        metadata.lastCheckInAt = new Date().getTime();
+        await extStorage.setItem("metadata", metadata);
+      }
+      sendMessage("logger", {
+        msg: `Immediate check-in completed successfully, updated last check-in date`,
+        level: "info",
+      }).catch();
+      // 执行完成后，安排明天的任务
+      await scheduleNextCheckIn();
+    } catch (error) {
+      sendMessage("logger", {
+        msg: `Error during immediate check-in: ${error}`,
+        level: "error",
+      }).catch();
+    }
+  }
+
   // 若已存在同名任务，检查是否需要立即执行
   const existingAlarm = await chrome.alarms.get(EJobType.DailySiteCheckIn);
   if (existingAlarm) {
-    // 即使任务已存在，如果错过了今天的签到时间，也立即执行一次
-    if (missedToday) {
+    // 即使任务已存在，如果错过了今天的签到时间且今天还没有签到过，也立即执行一次
+    if (missedToday && !checkedInToday) {
       sendMessage("logger", {
         msg: `Daily site check-in job exists but missed today's check-in time (${format(checkInTime, "HH:mm:ss")}), executing immediately at ${format(now, "yyyy-MM-dd HH:mm:ss")}`,
         level: "info",
       }).catch();
 
       // 立即执行签到
-      setTimeout(async () => {
-        try {
-          await doSiteCheckIn();
-          sendMessage("logger", {
-            msg: `Immediate check-in completed successfully`,
-            level: "info",
-          }).catch();
-        } catch (error) {
-          sendMessage("logger", {
-            msg: `Error during immediate check-in: ${error}`,
-            level: "error",
-          }).catch();
-        }
-      }, 1000); // 延迟1秒执行，确保其他初始化完成
+      setTimeout(executeCheckIn, 1000); // 延迟1秒执行，确保其他初始化完成
+    } else if (checkedInToday) {
+      sendMessage("logger", {
+        msg: `Daily site check-in job already exists and already checked in today at ${lastCheckInDate ? format(lastCheckInDate, "yyyy-MM-dd HH:mm:ss") : "unknown time"}, skipping execution`,
+        level: "debug",
+      }).catch();
     } else {
       sendMessage("logger", {
         msg: `Daily site check-in job already exists, skipping creation`,
-        level: "info",
+        level: "debug",
       }).catch();
     }
     return;
@@ -361,27 +400,23 @@ export async function createDailySiteCheckInJob() {
     level: "info",
   }).catch();
 
-  if (missedToday) {
-    // 如果错过了今天的签到时间，立即执行一次签到
+  if (missedToday && !checkedInToday) {
+    // 如果错过了今天的签到时间且今天还没有签到过，立即执行一次签到
     sendMessage("logger", {
       msg: `Missed today's check-in time (${format(checkInTime, "HH:mm:ss")}), executing immediately at ${format(now, "yyyy-MM-dd HH:mm:ss")}`,
       level: "info",
     }).catch();
 
     // 立即执行签到
-    setTimeout(async () => {
-      try {
-        await doSiteCheckIn();
-        // 执行完成后，安排明天的任务
-        await scheduleNextCheckIn();
-      } catch (error) {
-        sendMessage("logger", {
-          msg: `Error during immediate check-in: ${error}`,
-          level: "error",
-        }).catch();
-      }
-    }, 1000); // 延迟1秒执行，确保其他初始化完成
+    setTimeout(executeCheckIn, 1000); // 延迟1秒执行，确保其他初始化完成
 
+    // 设置明天的签到时间
+    checkInTime.setDate(checkInTime.getDate() + 1);
+  } else if (checkedInToday) {
+    sendMessage("logger", {
+      msg: `Already checked in today at ${lastCheckInDate ? format(lastCheckInDate, "yyyy-MM-dd HH:mm:ss") : "unknown time"}, scheduling for tomorrow`,
+      level: "info",
+    }).catch();
     // 设置明天的签到时间
     checkInTime.setDate(checkInTime.getDate() + 1);
   }
@@ -401,6 +436,12 @@ export async function createDailySiteCheckInJob() {
         level: "info",
       }).catch();
       await doSiteCheckIn();
+      // 更新最后签到时间
+      const metadata = await extStorage.getItem("metadata");
+      if (metadata) {
+        metadata.lastCheckInAt = new Date().getTime();
+        await extStorage.setItem("metadata", metadata);
+      }
       await scheduleNextCheckIn(); // 执行完成后调度下一次
     },
   });
@@ -429,9 +470,9 @@ export async function setDailySiteCheckInJob() {
 onMessage("setDailySiteCheckInJob", async () => await setDailySiteCheckInJob());
 onMessage("cleanupDailySiteCheckInJob", async () => await cleanupDailySiteCheckInJob());
 
-// 初始化时启动签到定时任务（带存在性检查，不会重复创建）
+// 初始化时启动签到定时任务（改为由首次安装或用户手动触发，不在模块加载时自启）
 // noinspection JSIgnoredPromiseFromCall
-createDailySiteCheckInJob();
+// createDailySiteCheckInJob();
 
 function doReDownloadTorrentToDownloader(option: IDownloadTorrentToClientOption) {
   return async () => {

@@ -120,6 +120,9 @@ export interface IMetadataPiniaStorageSchema {
   // 上一次自动刷新的时间戳
   lastUserInfoAutoFlushAt: number;
 
+  // 上一次签到的时间戳
+  lastCheckInAt?: number;
+
   // 站点 host 映射表
   siteHostMap: Record<TSiteHost, TSiteKey>;
 }
