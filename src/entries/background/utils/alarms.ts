@@ -514,3 +514,14 @@ onMessage("reDownloadTorrentToLocalFile", async ({ data }) => {
       sendMessage("setDownloadHistoryStatus", { downloadId: data.downloadId!, status: "failed" }).catch();
     });
 });
+
+// 兜底监听：若 job-scheduler 的内存映射因 Service Worker 回收丢失，仍能执行重试签到
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name.startsWith(EJobType.RetryCheckIn)) {
+    const [, siteId] = alarm.name.split("-");
+    if (siteId) {
+      // noinspection JSIgnoredPromiseFromCall
+      retryCheckIn(siteId as TSiteID).catch();
+    }
+  }
+});

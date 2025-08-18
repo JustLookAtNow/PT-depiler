@@ -5,7 +5,7 @@ import "./utils/cookies.ts";
 import "./utils/offscreen.ts";
 import "./utils/contextMenus.ts";
 import "./utils/omnibox.ts";
-import { createDailySiteCheckInJob } from "./utils/alarms.ts";
+import { createDailySiteCheckInJob, EJobType } from "./utils/alarms.ts";
 import "./utils/webRequest.ts";
 
 // 监听 点击图标 事件
@@ -26,7 +26,16 @@ onMessage("ping", async ({ data }) => {
 });
 
 // 恢复（重新注册）每日签到任务，防止 Service Worker 重载后丢失回调
+// 保证后台脚本重载后仍存在签到任务，但避免重复日志
+async function ensureDailySiteCheckInJob() {
+  try {
+    const alarm = await chrome.alarms.get(EJobType.DailySiteCheckIn);
+    if (!alarm) {
+      await createDailySiteCheckInJob();
+    }
+  } catch (e) {
+    console.error("[PTD] Failed to ensure daily site check-in job:", e);
+  }
+}
 // noinspection JSIgnoredPromiseFromCall
-createDailySiteCheckInJob().catch((e) => {
-  console.error("[PTD] Failed to ensure daily site check-in job:", e);
-});
+ensureDailySiteCheckInJob();
