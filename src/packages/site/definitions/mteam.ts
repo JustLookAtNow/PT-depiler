@@ -165,6 +165,18 @@ export const siteMetadata: ISiteMetadata = {
   ],
   formerHosts: ["xp.m-team.io", "pt.m-team.cc", "tp.m-team.cc"],
 
+  checkIn: {
+    path: "/usercp",
+    method: "GET",
+    selectors: {
+      message: {
+        selector: "#outer > table.main > tbody > tr > td > table > tbody > tr > td > p",
+      },
+    },
+    openInTab: true,
+    waitForMs: 3000,
+  },
+
   category: [
     {
       name: "分类入口",

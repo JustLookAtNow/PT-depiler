@@ -15,6 +15,22 @@ onMessage("openOptionsPage", async ({ data: url }) => {
   openOptionsPage(url);
 });
 
+onMessage("openTab", async ({ data }) => {
+  const { url, waitForMs } = data || {};
+  if (!url) return;
+  const tab = await chrome.tabs.create({ url });
+  if (waitForMs && waitForMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, waitForMs));
+    try {
+      if (tab?.id != null) {
+        await chrome.tabs.remove(tab.id);
+      }
+    } catch (e) {
+      // ignore errors if tab already closed or id invalid
+    }
+  }
+});
+
 onMessage("downloadFile", async ({ data: downloadOptions }) => {
   return await chrome.downloads.download(downloadOptions);
 });

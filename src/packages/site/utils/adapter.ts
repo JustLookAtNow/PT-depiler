@@ -60,6 +60,10 @@ export async function cookie(detail: chrome.cookies.CookieDetails): Promise<chro
   return await sendMessage("getCookie", detail);
 }
 
+export async function openTab(url: string, waitForMs?: number): Promise<void> {
+  await sendMessage("openTab", { url, waitForMs });
+}
+
 export function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

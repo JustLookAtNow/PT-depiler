@@ -360,6 +360,17 @@ export interface ISiteMetadata {
     selectors?: {
       message: IElementQuery;
     };
+    /**
+     * 是否通过打开新标签页完成签到。
+     * - 为 true 时，后台将打开一个新标签访问 `path`，而不是走 XHR 请求。
+     * - 默认为 false 以保持向后兼容。
+     */
+    openInTab?: boolean;
+    /**
+     * 当 openInTab 为 true 时，是否等待页面加载完成后再关闭标签或返回结果。
+     * - 如果提供了 waitForMs，则在打开后等待指定毫秒数再返回。
+     */
+    waitForMs?: number;
     [key: string]: any;
   };
 }

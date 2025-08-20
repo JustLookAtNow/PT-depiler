@@ -5,6 +5,7 @@ import { type AxiosError, type AxiosRequestConfig, type AxiosResponse } from "ax
 
 // noinspection ES6PreferShortImport
 import { axios, isCloudflareBlocked, retrieve, sleep, store } from "../utils/adapter";
+import { openTab } from "../utils/adapter";
 import {
   EResultParseStatus,
   IElementQuery,
@@ -730,10 +731,20 @@ export default class BittorrentSite {
       selectors?: {
         message: IElementQuery;
       };
+      openInTab?: boolean;
+      waitForMs?: number;
     };
 
     if (!checkInConfig?.path) {
       throw new Error(`Site ${this.name} does not support check-in.`);
+    }
+
+    // 如果需要通过打开新标签页进行签到
+    if (checkInConfig.openInTab) {
+      const requestConfig = { baseURL: this.url, url: checkInConfig.path } as AxiosRequestConfig;
+      const fullUrl = this.fixLink(checkInConfig.path, requestConfig);
+      await openTab(fullUrl, checkInConfig.waitForMs);
+      return `Check-in page opened for ${this.name}.`;
     }
 
     const req = await this.request<Document>({
