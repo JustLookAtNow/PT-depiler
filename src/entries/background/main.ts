@@ -1,4 +1,5 @@
 import { onMessage } from "@/messages.ts";
+import { fixAllStoredUserInfo } from "./utils/fixer.ts";
 
 import "./utils/base.ts";
 import "./utils/cookies.ts";
@@ -18,6 +19,8 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   if (details?.reason === "install") {
     await createDailySiteCheckInJob();
   }
+  // 修复存储中的坏数据
+  fixAllStoredUserInfo().catch();
 });
 
 onMessage("ping", async ({ data }) => {

@@ -37,8 +37,9 @@ export interface IConfigPiniaStorageSchema {
   userName: string;
 
   contextMenus: {
-    // 是否启用选择内容时搜索
-    allowSelectionTextSearch: boolean;
+    enabled: boolean; // 是否启用右键菜单
+    allowSelectionTextSearch: boolean; // 是否启用选择内容时搜索
+    allowLinkDownloadPush: boolean; // 是否允许链接推送
   };
 
   contentScript: {
@@ -111,6 +112,7 @@ export interface IConfigPiniaStorageSchema {
     showTimeline: boolean;
     showField: Record<ITimelineUserInfoField["name"] | "ratio", boolean>; // 需要展示的数据，注意 ratio, siteCount, totalYear 不作为设置项
     showPerSiteField: Record<"siteName" | "name" | "level" | "uid", boolean>; // 需要展示的站点数据
+    backgroundColor: string; // 背景颜色
     dateFormat: "time_added" /*     yyyy-MM-dd */ | "time_alive" /* 过去时间 xxx ago */;
     faviconBlue: number;
     selectedSites: TSiteID[]; // 需要展示的站点
@@ -160,6 +162,7 @@ export interface IConfigPiniaStorageSchema {
         interval: number; // 每次重试的间隔（ 1-5 分钟 ）
       };
     };
+    alwaysPickLastUserInfo: boolean; // 在获取用户信息时，带入最新一次的 userInfo 作为初始值
     // 是否在概览中展示已被标记为死亡 （isDead） 的站点
     showDeadSiteInOverview: boolean;
     // 是否在概览中展示已被标记为离线 （isOffline） 或不允许查询用户信息 （ allowQueryUserInfo === false ） 的站点
@@ -190,6 +193,8 @@ export interface IConfigPiniaStorageSchema {
     treatTTQueryAsImdbSearch: boolean;
     // 是否允许单站点搜索
     allowSingleSiteSearch: boolean;
+    // 是否启用快速站点过滤功能
+    quickSiteFilter: boolean;
   };
 
   // 配置同样在 searchEntity 页面（偷懒下）

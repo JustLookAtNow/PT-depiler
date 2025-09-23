@@ -11,7 +11,6 @@ import VueDevTools from "vite-plugin-vue-devtools";
 import webExtension from "vite-plugin-web-extension";
 
 // @ts-ignore
-import tailwindcss from "@tailwindcss/vite";
 import { vitePluginGenerateWebextLocales } from "./vite/plugin/generateWebextLocales.ts";
 
 import git from "git-rev-sync";
@@ -32,6 +31,7 @@ const permissions = [
   "declarativeNetRequest",
   "storage",
   "unlimitedStorage",
+  "notifications",
 ];
 
 // @ts-ignore
@@ -54,7 +54,6 @@ export default defineConfig({
         Buffer: true,
       },
     }),
-    tailwindcss(),
     VueDevTools({
       launchEditor: fs.existsSync(base_path("./.idea")) ? "webstorm" : "vscode",
     }),

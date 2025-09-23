@@ -92,6 +92,8 @@ export async function cancelFlushSiteLastUserInfo() {
 export interface ITimelineSiteMetadata extends Pick<ISiteMetadata, "id"> {
   siteName: string; // 解析后的站点名称
   hasUserInfo: boolean; // 是否有用户配置
+  isDead: boolean; // 是否为失效站点
+  isOffline: boolean; // 是否为离线站点
   faviconSrc: string;
   faviconElement: HTMLImageElement; // 站点的图片
 }
@@ -122,6 +124,8 @@ export async function loadAllAddedSiteMetadata(sites?: string[]): Promise<TOptio
             id: siteId,
             siteName: await metadataStore.getSiteName(siteId),
             hasUserInfo: Object.hasOwn(siteMetadata, "userInfo"),
+            isDead: siteMetadata.isDead ?? false,
+            isOffline: metadataStore.sites[siteId]?.isOffline ?? false,
             faviconSrc: siteFaviconUrl,
             faviconElement: siteFavicon,
           };
