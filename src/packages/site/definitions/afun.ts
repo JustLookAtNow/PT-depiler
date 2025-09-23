@@ -21,7 +21,15 @@ export const siteMetadata: ISiteMetadata = {
   collaborator: ["geni", "hyuan280"],
 
   urls: ["uggcf://jjj.cgybire.pp/"],
-
+  checkIn: {
+    path: "/attendance.php",
+    method: "GET",
+    selectors: {
+      message: {
+        selector: "#outer > table.main > tbody > tr > td > table > tbody > tr > td > p",
+      },
+    },
+  },
   category: [
     {
       name: "搜索入口",
