@@ -9,7 +9,15 @@ export const siteMetadata: ISiteMetadata = {
   name: "星陨阁",
   description: "三十年河东，三十年河西！莫欺少年穷！",
   tags: ["综合", "影视", "国漫"],
-
+  checkIn: {
+    path: "/attendance.php",
+    method: "GET",
+    selectors: {
+      message: {
+        selector: "#outer > table.main > tbody > tr > td > table > tbody > tr > td > p",
+      },
+    },
+  },
   type: "private",
   schema: "NexusPHP",
 

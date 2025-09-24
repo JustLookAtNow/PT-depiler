@@ -16,7 +16,15 @@ export const siteMetadata: ISiteMetadata = {
   schema: "NexusPHP",
 
   urls: ["uggcf://jjj.avprcg.arg/"],
-
+  checkIn: {
+    path: "/attendance.php",
+    method: "GET",
+    selectors: {
+      message: {
+        selector: "#outer > table.main > tbody > tr > td > table > tbody > tr > td > p",
+      },
+    },
+  },
   category: [
     {
       name: "分类",

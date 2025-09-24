@@ -13,6 +13,15 @@ export const siteMetadata: ISiteMetadata = {
   schema: "NexusPHP",
 
   urls: ["uggcf://cgsnaf.pp/", "uggcf://phfng.jva/"],
+  checkIn: {
+    path: "/attendance.php",
+    method: "GET",
+    selectors: {
+      message: {
+        selector: "#outer > table.main > tbody > tr > td > table > tbody > tr > td > p",
+      },
+    },
+  },
 
   category: [
     {
